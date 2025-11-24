@@ -13,20 +13,44 @@ export default function Chat() {
     const [loading, setLoading] = useState(false);
     const [models, setModels] = useState([]);
     const [selectedModel, setSelectedModel] = useState('');
+    const [temperature, setTemperature] = useState(0.7);
     const [conversationId, setConversationId] = useState('');
     const [sidebarOpen, setSidebarOpen] = useState(false);
     const [conversations, setConversations] = useState([]);
     const [menuOpen, setMenuOpen] = useState(false);
+    const [conversationFilter, setConversationFilter] = useState('');
     const messagesEndRef = useRef(null);
+    const promptLibrary = [
+        {
+            title: 'Explain like I am five',
+            prompt: 'Explain the following concept in simple terms with a friendly tone: '
+        },
+        {
+            title: 'Summarize research',
+            prompt: 'Summarize the key findings and implications from this research:'
+        },
+        {
+            title: 'Brainstorm ideas',
+            prompt: 'Brainstorm creative ideas and list actionable next steps for: '
+        }
+    ];
 
     useEffect(() => {
         fetchModels();
         loadConversation();
+        const savedTemperature = localStorage.getItem('ai-app-temperature');
+        if (savedTemperature) {
+            setTemperature(parseFloat(savedTemperature));
+        }
     }, []);
 
     useEffect(() => {
         scrollToBottom();
     }, [messages]);
+
+    useEffect(() => {
+        loadConversationsList();
+    }, [conversationFilter]);
 
     useEffect(() => {
         // Save conversation whenever messages change
@@ -83,6 +107,7 @@ export default function Chat() {
                 id: conversationId,
                 messages,
                 model: selectedModel,
+                temperature,
                 updatedAt: new Date().toISOString(),
                 title: messages[0]?.content?.substring(0, 50) || 'New Conversation'
             };
@@ -160,7 +185,12 @@ export default function Chat() {
             allConversations.sort((a, b) =>
                 new Date(b.updatedAt || 0) - new Date(a.updatedAt || 0)
             );
-            setConversations(allConversations);
+            const filtered = conversationFilter
+                ? allConversations.filter(conv =>
+                    (conv.title || 'New Conversation').toLowerCase().includes(conversationFilter.toLowerCase())
+                )
+                : allConversations;
+            setConversations(filtered);
         } catch (error) {
             console.error('Failed to load conversations list:', error);
         }
@@ -181,6 +211,9 @@ export default function Chat() {
                 setConversationId(convId);
                 if (conversation.model) {
                     setSelectedModel(conversation.model);
+                }
+                if (typeof conversation.temperature === 'number') {
+                    setTemperature(conversation.temperature);
                 }
                 localStorage.setItem(ACTIVE_CONVERSATION_KEY, convId);
                 setSidebarOpen(false);
@@ -252,7 +285,8 @@ export default function Chat() {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     messages: [...messages, userMessage],
-                    model: selectedModel
+                    model: selectedModel,
+                    temperature
                 })
             });
 
@@ -272,6 +306,15 @@ export default function Chat() {
             }]);
         } finally {
             setLoading(false);
+        }
+    };
+
+    const copyMessage = async (content) => {
+        try {
+            await navigator.clipboard.writeText(content);
+            toast.success('Response copied');
+        } catch (error) {
+            toast.error('Unable to copy text');
         }
     };
 
@@ -309,6 +352,14 @@ export default function Chat() {
                 <div className={styles.sidebarHeader}>
                     <h2>Conversations</h2>
                     <button onClick={() => setSidebarOpen(false)} className={styles.closeSidebar}>✕</button>
+                </div>
+                <div className={styles.sidebarSearch}>
+                    <input
+                        type="search"
+                        placeholder="Search titles"
+                        value={conversationFilter}
+                        onChange={(e) => setConversationFilter(e.target.value)}
+                    />
                 </div>
                 <div className={styles.conversationsList}>
                     {conversations.length === 0 ? (
@@ -400,8 +451,27 @@ export default function Chat() {
                                                 <option key={m.id} value={m.id}>
                                                     {m.name} {m.free ? '(Free)' : '(Paid)'}
                                                 </option>
-                                            ))}
-                                        </select>
+                                                ))}
+                                            </select>
+                                    </div>
+                                    <div className={styles.menuSection}>
+                                        <label className={styles.menuLabel}>Temperature {temperature.toFixed(1)}</label>
+                                        <input
+                                            type="range"
+                                            min="0"
+                                            max="1"
+                                            step="0.1"
+                                            value={temperature}
+                                            onChange={(e) => {
+                                                const value = parseFloat(e.target.value);
+                                                setTemperature(value);
+                                                localStorage.setItem('ai-app-temperature', String(value));
+                                            }}
+                                            className={styles.temperatureSlider}
+                                        />
+                                        <p className={styles.menuHint}>
+                                            Lower values make responses more focused; higher values increase creativity.
+                                        </p>
                                     </div>
                                 </div>
                             </>
@@ -418,6 +488,18 @@ export default function Chat() {
                     <div className={styles.emptyState}>
                         <h2>Start a new conversation</h2>
                         <p>Click ⚙️ to select a model and manage conversations.</p>
+                        <div className={styles.promptGrid}>
+                            {promptLibrary.map(prompt => (
+                                <button
+                                    key={prompt.title}
+                                    className={styles.promptCard}
+                                    onClick={() => setInput(prompt.prompt)}
+                                >
+                                    <span className={styles.promptTitle}>{prompt.title}</span>
+                                    <span className={styles.promptText}>{prompt.prompt}</span>
+                                </button>
+                            ))}
+                        </div>
                     </div>
                 )}
 
@@ -431,6 +513,15 @@ export default function Chat() {
                                 <span className={styles.modelBadge}>{msg.modelName}</span>
                             )}
                             {msg.content}
+                            {msg.role === 'assistant' && (
+                                <button
+                                    className={styles.copyButton}
+                                    onClick={() => copyMessage(msg.content)}
+                                    title="Copy response"
+                                >
+                                    Copy
+                                </button>
+                            )}
                         </div>
                     </div>
                 ))}
