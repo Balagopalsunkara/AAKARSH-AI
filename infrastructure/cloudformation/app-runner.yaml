@@ -1,0 +1,211 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Deploy AI-APP backend and frontend to AWS App Runner with ECR image sources.
+
+Parameters:
+  ProjectName:
+    Type: String
+    Default: ai-app
+    Description: Prefix used for resource names.
+  AwsRegion:
+    Type: String
+    Default: us-east-1
+    Description: AWS region for deployment.
+  BackendECRRepositoryName:
+    Type: String
+    Default: ai-app-backend
+    Description: Name of the backend ECR repository.
+  BackendImageTag:
+    Type: String
+    Default: latest
+    Description: Docker image tag to deploy for the backend.
+  BackendServiceName:
+    Type: String
+    Default: ai-app-backend
+    Description: App Runner service name for the backend.
+  BackendCpu:
+    Type: String
+    Default: '1024'
+    AllowedValues: ['1024', '2048']
+    Description: vCPU setting for the backend service.
+  BackendMemory:
+    Type: String
+    Default: '2048'
+    AllowedValues: ['2048', '3072', '4096']
+    Description: Memory setting for the backend service (MB).
+  FrontendECRRepositoryName:
+    Type: String
+    Default: ai-app-frontend
+    Description: Name of the frontend ECR repository.
+  FrontendImageTag:
+    Type: String
+    Default: latest
+    Description: Docker image tag to deploy for the frontend.
+  FrontendServiceName:
+    Type: String
+    Default: ai-app-frontend
+    Description: App Runner service name for the frontend.
+  FrontendCpu:
+    Type: String
+    Default: '1024'
+    AllowedValues: ['1024', '2048']
+    Description: vCPU setting for the frontend service.
+  FrontendMemory:
+    Type: String
+    Default: '2048'
+    AllowedValues: ['2048', '3072', '4096']
+    Description: Memory setting for the frontend service (MB).
+  NextPublicApiUrl:
+    Type: String
+    Default: https://replace-with-backend-url
+    Description: Value for NEXT_PUBLIC_API_URL in the frontend container.
+  AutoDeploymentsEnabled:
+    Type: String
+    Default: true
+    AllowedValues: ['true', 'false']
+    Description: Enable automatic deployments when new images are pushed.
+  MinSize:
+    Type: Number
+    Default: 1
+    Description: Minimum number of App Runner instances.
+  MaxSize:
+    Type: Number
+    Default: 5
+    Description: Maximum number of App Runner instances.
+  MaxConcurrency:
+    Type: Number
+    Default: 20
+    Description: Maximum concurrent requests per instance.
+
+Resources:
+  BackendRepository:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: !Ref BackendECRRepositoryName
+      ImageTagMutability: IMMUTABLE
+      ImageScanningConfiguration:
+        ScanOnPush: true
+
+  FrontendRepository:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: !Ref FrontendECRRepositoryName
+      ImageTagMutability: IMMUTABLE
+      ImageScanningConfiguration:
+        ScanOnPush: true
+
+  AppRunnerAccessRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${ProjectName}-apprunner-role"
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: build.apprunner.amazonaws.com
+            Action: sts:AssumeRole
+
+  AppRunnerAccessRolePolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: !Sub "${ProjectName}-apprunner-ecr"
+      Roles:
+        - !Ref AppRunnerAccessRole
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Action:
+              - ecr:GetAuthorizationToken
+              - ecr:BatchCheckLayerAvailability
+              - ecr:GetDownloadUrlForLayer
+              - ecr:BatchGetImage
+            Resource: '*'
+
+  DefaultAutoScalingConfiguration:
+    Type: AWS::AppRunner::AutoScalingConfiguration
+    Properties:
+      AutoScalingConfigurationName: !Sub "${ProjectName}-autoscaling"
+      MaxConcurrency: !Ref MaxConcurrency
+      MinSize: !Ref MinSize
+      MaxSize: !Ref MaxSize
+
+  BackendService:
+    Type: AWS::AppRunner::Service
+    Properties:
+      ServiceName: !Ref BackendServiceName
+      SourceConfiguration:
+        AutoDeploymentsEnabled: !Ref AutoDeploymentsEnabled
+        AuthenticationConfiguration:
+          AccessRoleArn: !GetAtt AppRunnerAccessRole.Arn
+        ImageRepository:
+          ImageIdentifier: !Sub "${BackendRepository.RepositoryUri}:${BackendImageTag}"
+          ImageRepositoryType: ECR
+          ImageConfiguration:
+            Port: '4000'
+            RuntimeEnvironmentVariables:
+              - Name: NODE_ENV
+                Value: production
+              - Name: PORT
+                Value: '4000'
+      InstanceConfiguration:
+        Cpu: !Ref BackendCpu
+        Memory: !Ref BackendMemory
+      AutoScalingConfigurationArn: !GetAtt DefaultAutoScalingConfiguration.AutoScalingConfigurationArn
+      HealthCheckConfiguration:
+        HealthyThreshold: 1
+        Interval: 10
+        Path: /health
+        Protocol: HTTP
+        Timeout: 5
+        UnhealthyThreshold: 5
+
+  FrontendService:
+    Type: AWS::AppRunner::Service
+    Properties:
+      ServiceName: !Ref FrontendServiceName
+      SourceConfiguration:
+        AutoDeploymentsEnabled: !Ref AutoDeploymentsEnabled
+        AuthenticationConfiguration:
+          AccessRoleArn: !GetAtt AppRunnerAccessRole.Arn
+        ImageRepository:
+          ImageIdentifier: !Sub "${FrontendRepository.RepositoryUri}:${FrontendImageTag}"
+          ImageRepositoryType: ECR
+          ImageConfiguration:
+            Port: '3000'
+            RuntimeEnvironmentVariables:
+              - Name: NODE_ENV
+                Value: production
+              - Name: NEXT_PUBLIC_API_URL
+                Value: !Ref NextPublicApiUrl
+      InstanceConfiguration:
+        Cpu: !Ref FrontendCpu
+        Memory: !Ref FrontendMemory
+      AutoScalingConfigurationArn: !GetAtt DefaultAutoScalingConfiguration.AutoScalingConfigurationArn
+      HealthCheckConfiguration:
+        HealthyThreshold: 1
+        Interval: 10
+        Path: /
+        Protocol: HTTP
+        Timeout: 5
+        UnhealthyThreshold: 5
+
+Outputs:
+  BackendRepositoryUri:
+    Description: URI of the backend ECR repository.
+    Value: !GetAtt BackendRepository.RepositoryUri
+  FrontendRepositoryUri:
+    Description: URI of the frontend ECR repository.
+    Value: !GetAtt FrontendRepository.RepositoryUri
+  BackendServiceArn:
+    Description: ARN of the backend App Runner service.
+    Value: !GetAtt BackendService.ServiceArn
+  BackendServiceUrl:
+    Description: Public URL of the backend App Runner service.
+    Value: !GetAtt BackendService.ServiceUrl
+  FrontendServiceArn:
+    Description: ARN of the frontend App Runner service.
+    Value: !GetAtt FrontendService.ServiceArn
+  FrontendServiceUrl:
+    Description: Public URL of the frontend App Runner service.
+    Value: !GetAtt FrontendService.ServiceUrl
