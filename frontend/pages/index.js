@@ -1,7 +1,7 @@
 import Head from 'next/head';
 import { useRouter } from 'next/router';
+import { useEffect, useState } from 'react';
 import styles from '../styles/Home.module.css';
-import { useState, useEffect } from 'react';
 
 export default function Home() {
   const router = useRouter();
@@ -35,16 +35,19 @@ export default function Home() {
           <div className={styles.ctaGroup}>
             <button onClick={() => router.push('/chat')} className={styles.primaryButton}>
               <span>Start Chatting</span>
-              <span>→</span>
+              <span aria-hidden>→</span>
             </button>
-            <button onClick={() => window.open('https://github.com/Balagopalsunkara/AI-APP', '_blank')} className={styles.secondaryButton}>
+            <button
+              onClick={() => window.open('https://github.com/Balagopalsunkara/AI-APP', '_blank')}
+              className={styles.secondaryButton}
+            >
               View Source
             </button>
           </div>
 
           <div className={styles.featuresGrid}>
             <div className={styles.featureCard}>
-              <span className={styles.icon}>🔒</span>
+              <span className={styles.icon} aria-hidden>🔒</span>
               <h3 className={styles.featureTitle}>100% Private</h3>
               <p className={styles.featureDesc}>
                 Your data never leaves your device. All processing happens locally using optimized on-device models.
@@ -52,7 +55,7 @@ export default function Home() {
             </div>
 
             <div className={styles.featureCard}>
-              <span className={styles.icon}>⚡</span>
+              <span className={styles.icon} aria-hidden>⚡</span>
               <h3 className={styles.featureTitle}>Zero Latency</h3>
               <p className={styles.featureDesc}>
                 No network delays. Experience instant responses powered by local CPU/GPU inference.
@@ -60,7 +63,7 @@ export default function Home() {
             </div>
 
             <div className={styles.featureCard}>
-              <span className={styles.icon}>🧠</span>
+              <span className={styles.icon} aria-hidden>🧠</span>
               <h3 className={styles.featureTitle}>Smart Models</h3>
               <p className={styles.featureDesc}>
                 Choose from Phi-1.5, TinyLlama, or connect to Ollama for even more power.
@@ -71,7 +74,7 @@ export default function Home() {
       </main>
 
       <footer className={styles.footer}>
-        <p>AI-APP Local Edition • Built for Privacy</p>
+        <p>AI-APP Local Edition — Built for Privacy</p>
       </footer>
     </div>
   );

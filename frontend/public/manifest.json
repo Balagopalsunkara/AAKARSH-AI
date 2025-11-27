@@ -1,0 +1,16 @@
+{
+    "name": "AAKARSH AI",
+    "short_name": "AAKARSH AI",
+    "description": "Advanced AI Assistant",
+    "start_url": "/",
+    "display": "standalone",
+    "background_color": "#1c1c21",
+    "theme_color": "#1c1c21",
+    "icons": [
+        {
+            "src": "/icon.svg",
+            "sizes": "any",
+            "type": "image/svg+xml"
+        }
+    ]
+}

@@ -1,12 +1,12 @@
 # test-ai-chat.ps1
 # PowerShell script to test the AI chat backend endpoint
 # Usage: Run in PowerShell. Prompts for user input, sends to backend, prints AI response.
+# Set AI_APP_API_URL to override the default http://localhost:4000
 
-$apiUrl = "https://13.221.65.9"
-
-
-# Ignore SSL errors for self-signed certs (dev only)
-[System.Net.ServicePointManager]::ServerCertificateValidationCallback = { $true }
+$apiUrl = $env:AI_APP_API_URL
+if (-not $apiUrl) {
+    $apiUrl = "http://localhost:4000"
+}
 
 function Get-Models {
     try {

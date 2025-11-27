@@ -1,0 +1,23 @@
+[
+  {
+    "id": "google_search",
+    "name": "Google Search",
+    "description": "Web search using Google Custom Search API",
+    "baseUrl": "https://www.googleapis.com/customsearch/v1",
+    "enabled": false,
+    "config": {
+      "apiKey": "",
+      "cx": ""
+    }
+  },
+  {
+    "id": "bing_search",
+    "name": "Bing Search",
+    "description": "Web search using Bing Search API",
+    "baseUrl": "https://api.bing.microsoft.com/v7.0/search",
+    "enabled": false,
+    "config": {
+      "apiKey": ""
+    }
+  }
+]
