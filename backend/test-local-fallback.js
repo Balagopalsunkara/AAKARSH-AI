@@ -22,7 +22,7 @@ async function testLocalFallback() {
         messages: [
           { role: 'user', content: 'What is the weather?' }
         ],
-        model: 'huggingface/meta-llama-3.1-8b-instruct',
+        model: 'unsupported/remote-model',
         options: {}
       }
     },
