@@ -284,9 +284,11 @@ export default function Chat() {
               if (parsed.content) {
                 setMessages((prev) => {
                   const msgs = [...prev];
-                  const last = msgs[msgs.length - 1];
+                  const lastIndex = msgs.length - 1;
+                  const last = { ...msgs[lastIndex] };
                   if (last.role === 'assistant') {
                     last.content += parsed.content;
+                    msgs[lastIndex] = last;
                   }
                   return msgs;
                 });
@@ -435,22 +437,6 @@ export default function Chat() {
           if (line.startsWith('data: ')) {
             const data = line.slice(6);
             if (data.trim() === '[DONE]') break;
-
-            try {
-              const parsed = JSON.parse(data);
-              if (parsed.content) {
-                setMessages((prev) => {
-                  const newMessages = [...prev];
-                  const lastMsg = newMessages[newMessages.length - 1];
-                  if (lastMsg.role === 'assistant') {
-                    lastMsg.content += parsed.content;
-                  }
-                  return newMessages;
-                });
-              }
-            } catch (e) {
-              // Ignore parse errors for partial chunks
-            }
           }
         }
       }
