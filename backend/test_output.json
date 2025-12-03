@@ -1,0 +1,182 @@
+[
+  {
+    "id": 1,
+    "prompt": "Who are you?",
+    "response": "Regarding \"you?\" - that's an interesting topic. I can help you write code, debug issues, or document features related to it.",
+    "duration": 151
+  },
+  {
+    "id": 2,
+    "prompt": "Are you a real person?",
+    "response": "Regarding \"you\" - that's an interesting topic. I can help you write code, debug issues, or document features related to it.",
+    "duration": 41
+  },
+  {
+    "id": 3,
+    "prompt": "What can you do?",
+    "response": "I can help with coding, system operations, debugging, and general questions. I use advanced NLP to understand your intent.",
+    "duration": 34
+  },
+  {
+    "id": 4,
+    "prompt": "How do you work?",
+    "response": "To achieve that, you typically need to break it down into steps. I can help you plan the implementation if you give me more details.",
+    "duration": 36
+  },
+  {
+    "id": 5,
+    "prompt": "How do I write a function in javascript?",
+    "response": "To achieve that, you typically need to break it down into steps. I can help you plan the implementation if you give me more details.",
+    "duration": 53
+  },
+  {
+    "id": 6,
+    "prompt": "Explain async await",
+    "response": "Async/await is syntactic sugar for Promises. Use `async` before a function and `await` before a Promise to pause execution until it resolves.",
+    "duration": 35
+  },
+  {
+    "id": 7,
+    "prompt": "What is a react component?",
+    "response": "You're asking about \"a react component?\". While I don't have a specific definition for that yet, I can help you look it up or analyze code related to it.",
+    "duration": 45
+  },
+  {
+    "id": 8,
+    "prompt": "How do REST APIs work?",
+    "response": "To achieve that, you typically need to break it down into steps. I can help you plan the implementation if you give me more details.",
+    "duration": 38
+  },
+  {
+    "id": 9,
+    "prompt": "Show me a python loop",
+    "response": "I'll help you show with me, a python loop. What's the first step you'd like to take?",
+    "duration": 39
+  },
+  {
+    "id": 10,
+    "prompt": "What is a variable?",
+    "response": "You're asking about \"a variable?\". While I don't have a specific definition for that yet, I can help you look it up or analyze code related to it.",
+    "duration": 27
+  },
+  {
+    "id": 11,
+    "prompt": "What is docker?",
+    "response": "You're asking about \"docker?\". While I don't have a specific definition for that yet, I can help you look it up or analyze code related to it.",
+    "duration": 44
+  },
+  {
+    "id": 12,
+    "prompt": "Explain CI/CD pipelines",
+    "response": "I'll help you explain with CI/CD pipelines. What's the first step you'd like to take?",
+    "duration": 38
+  },
+  {
+    "id": 13,
+    "prompt": "What is kubernetes used for?",
+    "response": "You're asking about \"kubernetes\". While I don't have a specific definition for that yet, I can help you look it up or analyze code related to it.",
+    "duration": 39
+  },
+  {
+    "id": 14,
+    "prompt": "How do I deploy to AWS?",
+    "response": "To achieve that, you typically need to break it down into steps. I can help you plan the implementation if you give me more details.",
+    "duration": 32
+  },
+  {
+    "id": 15,
+    "prompt": "Hello there",
+    "response": "Regarding \"there\" - that's an interesting topic. I can help you write code, debug issues, or document features related to it.",
+    "duration": 31
+  },
+  {
+    "id": 16,
+    "prompt": "Good morning",
+    "response": "Regarding \"Good morning\" - that's an interesting topic. I can help you write code, debug issues, or document features related to it.",
+    "duration": 24
+  },
+  {
+    "id": 17,
+    "prompt": "Thank you very much",
+    "response": "I'll help you thank with you. What's the first step you'd like to take?",
+    "duration": 24
+  },
+  {
+    "id": 18,
+    "prompt": "Goodbye",
+    "response": "I'm listening. Tell me more about what you're working on.",
+    "duration": 20
+  },
+  {
+    "id": 19,
+    "prompt": "Tell me a joke",
+    "response": "I'll help you tell with me, a joke. What's the first step you'd like to take?",
+    "duration": 29
+  },
+  {
+    "id": 20,
+    "prompt": "Analyze this text: The quick brown fox jumps over the lazy dog.",
+    "response": "I'll help you analyze with this text:, The quick brown fox, over the lazy dog.. What's the first step you'd like to take?",
+    "duration": 45
+  },
+  {
+    "id": 21,
+    "prompt": "Extract entities from: Elon Musk works at SpaceX in California.",
+    "response": "Regarding \"California.\" - that's an interesting topic. I can help you write code, debug issues, or document features related to it.",
+    "duration": 30
+  },
+  {
+    "id": 22,
+    "prompt": "Is this positive? I love coding so much!",
+    "response": "Regarding \"I\" - that's an interesting topic. I can help you write code, debug issues, or document features related to it.",
+    "duration": 38
+  },
+  {
+    "id": 23,
+    "prompt": "Is this negative? I hate bugs.",
+    "response": "Regarding \"I\" - that's an interesting topic. I can help you write code, debug issues, or document features related to it.",
+    "duration": 37
+  },
+  {
+    "id": 24,
+    "prompt": "Can you help me debug my react component?",
+    "response": "Regarding \"you\" - that's an interesting topic. I can help you write code, debug issues, or document features related to it.",
+    "duration": 40
+  },
+  {
+    "id": 25,
+    "prompt": "I need to deploy a docker container",
+    "response": "Docker containers package code and dependencies together. Use a `Dockerfile` to define the image and `docker-compose.yml` for orchestration.",
+    "duration": 30
+  },
+  {
+    "id": 26,
+    "prompt": "Why is my code failing?",
+    "response": "Regarding \"my code\" - that's an interesting topic. I can help you write code, debug issues, or document features related to it.",
+    "duration": 25
+  },
+  {
+    "id": 27,
+    "prompt": "",
+    "response": "I encountered an error processing that request.",
+    "duration": 1
+  },
+  {
+    "id": 28,
+    "prompt": "   ",
+    "response": "I'm listening. Tell me more about what you're working on.",
+    "duration": 13
+  },
+  {
+    "id": 29,
+    "prompt": "asdf jkl;",
+    "response": "Regarding \"asdf jkl;\" - that's an interesting topic. I can help you write code, debug issues, or document features related to it.",
+    "duration": 28
+  },
+  {
+    "id": 30,
+    "prompt": "What is the meaning of life, the universe, and everything?",
+    "response": "You're asking about \"the meaning of life,\". While I don't have a specific definition for that yet, I can help you look it up or analyze code related to it.",
+    "duration": 44
+  }
+]

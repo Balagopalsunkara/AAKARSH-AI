@@ -1,7 +1,7 @@
 const logger = require('./logger');
 const axios = require('axios');
 const OpenAI = require('openai');
-const nlpService = require('./nlpService');
+const tinyLLM = require('./tinyLLM');
 
 const HUGGINGFACE_API_KEY =
   process.env.HUGGINGFACE_API_KEY ||
@@ -22,16 +22,17 @@ async function getTransformers() {
   if (!transformersLib) {
     transformersLib = await import('@xenova/transformers');
     if (transformersLib?.env) {
+      // Enforce local-only usage
       transformersLib.env.allowLocalModels = true;
-      const token =
-        process.env.HF_TOKEN ||
-        process.env.HF_HUB_TOKEN ||
-        HUGGINGFACE_API_KEY;
+      transformersLib.env.allowRemoteModels = false;
 
-      if (token) {
-        transformersLib.env.HF_TOKEN = token;
-        transformersLib.env.HF_HUB_TOKEN = token;
-      }
+      // Set local model path to backend/models directory
+      const path = require('path');
+      transformersLib.env.localModelPath = path.join(__dirname, 'models');
+
+      logger.info('Transformers configured for local-only mode', {
+        path: transformersLib.env.localModelPath
+      });
     }
   }
   return transformersLib;
@@ -117,50 +118,52 @@ function composeContent(content, inlineNotices) {
 }
 
 const AVAILABLE_MODELS = {
-  // 1. Local / In-Browser / CPU Models (Primary for "No Third Party" usage)
-  'xenova/tinyllama-chat': {
-    name: 'TinyLlama Chat (Local)',
-    provider: 'Local CPU',
-    description: 'Fast, lightweight 1.1B model running entirely on your machine. Best for quick chats.',
-    maxTokens: 512,
-    free: true,
-    type: 'xenova',
-    transformersModel: 'Xenova/tinyllama-chat',
-    notice: 'Runs locally on CPU. No data leaves your device.'
-  },
-  'xenova/phi-1_5': {
-    name: 'Phi-1.5 (Local)',
-    provider: 'Local CPU',
-    description: 'Microsoft\'s Phi-1.5 running locally. Good balance of speed and reasoning.',
-    maxTokens: 512,
-    free: true,
-    type: 'xenova',
-    transformersModel: 'Xenova/phi-1_5',
-    notice: 'Runs locally. First use downloads ~1.7GB weights.'
-  },
+  // 1. Rule-Based Assistant (100% Local, No Downloads)
   'local/instruct': {
-    name: 'Rule-Based Assistant',
+    name: 'Tiny LLM (Local Assistant)',
     provider: 'Built-in',
-    description: 'Instant responses using advanced pattern matching. Zero latency, offline capable.',
+    description: 'Lightweight, rule-based language model running locally. No downloads required.',
     maxTokens: 1024,
     free: true,
     type: 'local'
   },
 
-  // 2. Ollama (Local but requires external service)
+  // 2. Local LLMs (Require manual download to backend/models)
+  'xenova/tinyllama-chat': {
+    name: 'TinyLlama Chat (Local LLM)',
+    provider: 'Local CPU',
+    description: '1.1B model. Requires model files in backend/models.',
+    maxTokens: 512,
+    free: true,
+    type: 'xenova',
+    transformersModel: 'Xenova/tinyllama-chat',
+    notice: 'Requires model files to be manually downloaded to backend/models.'
+  },
+  'xenova/phi-1_5': {
+    name: 'Phi-1.5 (Local LLM)',
+    provider: 'Local CPU',
+    description: 'Microsoft Phi-1.5. Requires model files in backend/models.',
+    maxTokens: 512,
+    free: true,
+    type: 'xenova',
+    transformersModel: 'Xenova/phi-1_5',
+    notice: 'Requires model files to be manually downloaded to backend/models.'
+  },
+
+  // 3. Ollama (Local Service)
   'ollama/mistral:7b': {
     name: 'Mistral 7B (Ollama)',
     provider: 'Ollama Local',
-    description: 'High-performance local model via Ollama. Requires Ollama app running.',
+    description: 'Requires Ollama app running locally.',
     maxTokens: 2048,
     free: true,
     type: 'ollama',
     endpoint: `${OLLAMA_HOST}`,
     ollamaModel: 'mistral:7b',
-    notice: 'Requires Ollama running locally with "mistral" model.'
+    notice: 'Requires Ollama running locally.'
   },
 
-  // 3. Remote / Cloud Models (Optional)
+  // 4. Remote / Cloud Models (Optional)
   'huggingface/meta-llama-3.1-8b-instruct': {
     name: 'Llama 3.1 8B (Cloud)',
     provider: 'Hugging Face',
@@ -207,7 +210,7 @@ const AVAILABLE_MODELS = {
 
 class LLMService {
   constructor() {
-    this.defaultModel = 'xenova/tinyllama-chat';
+    this.defaultModel = 'local/instruct';
     this.openaiClient = null;
 
     if (process.env.OPENAI_API_KEY) {
@@ -670,8 +673,22 @@ class LLMService {
         for (const line of lines) {
           try {
             const json = JSON.parse(line);
+            if (json.error) {
+              throw new Error(json.error);
+            }
             if (json.message && json.message.content) yield { content: json.message.content };
-          } catch (e) { }
+          } catch (e) {
+            if (e.message !== 'Unexpected end of JSON input') {
+              logger.error('Ollama stream parse error', { error: e.message, line });
+              // If it's an API error from Ollama, we should probably stop and report it
+              if (line.includes('"error":')) {
+                try {
+                  const errJson = JSON.parse(line);
+                  if (errJson.error) throw new Error(errJson.error);
+                } catch (inner) { }
+              }
+            }
+          }
         }
       }
     } else {
@@ -971,7 +988,7 @@ ${closingLine}`;
     };
   }
 
-  generateWithLocalModel(prompt = '', modelId = this.defaultModel, options = {}) {
+  async generateWithLocalModel(prompt = '', modelId = this.defaultModel, options = {}) {
     const fallbackModelId = AVAILABLE_MODELS[modelId] && AVAILABLE_MODELS[modelId].type === 'local'
       ? modelId
       : this.defaultModel;
@@ -996,69 +1013,8 @@ ${closingLine}`;
 
     let response;
 
-    if (!prompt || !prompt.trim()) {
-      response = 'I\'m here and ready when you are. Ask me anything about AI, coding, DevOps, security, monitoring, databases, testing, or this project.';
-    } else if (nlpAnalysis && nlpAnalysis.entities) {
-      // Use NLP-extracted entities to provide more contextual responses
-      const entities = nlpAnalysis.entities;
-      const keywords = nlpAnalysis.keywords || [];
-
-      // Check if the prompt is asking about NLP capabilities
-      if (lowerPrompt.includes('nlp') || lowerPrompt.includes('natural language')) {
-        response = `I now have advanced NLP capabilities powered by compromise.js! Here's what I can do:
-
-**Entity Recognition**: I can identify people, places, organizations, dates, and values in your text.
-**Sentiment Analysis**: I can determine if text is positive, negative, or neutral.
-**Keyword Extraction**: I can identify the most important keywords and topics.
-**Intent Classification**: I can understand whether you're asking a question, giving a command, or making a statement.
-**Part-of-Speech Tagging**: I can analyze the grammatical structure of text.
-
-All these capabilities are rule-based and deterministic - no hallucinations, just accurate language understanding!`;
-      } else if (lowerPrompt.includes('analyze') && keywords.length > 0) {
-        // Provide analysis-focused response using extracted keywords
-        const keywordList = keywords.slice(0, 3).map(k => k.text).join(', ');
-        response = `I can help you analyze "${keywordList}" and related topics. My NLP engine has identified these as key concepts in your query. Let me provide targeted guidance based on what you're looking for.`;
-      }
-    }
-
-    if (!response && (lowerPrompt.includes('help') || lowerPrompt.includes('what can you do'))) {
-      response = `I can assist with a wide range of IT and workplace operations:
-
-**Development & Code**: Code reviews, refactoring, best practices, design patterns, testing strategies
-**DevOps**: CI/CD pipelines, Docker, Kubernetes, deployment strategies, infrastructure as code
-**Security**: Vulnerability assessment, authentication, authorization, compliance, security best practices
-**Monitoring**: Logs, metrics, alerting, observability, Prometheus/Grafana setup
-**Databases**: Query optimization, schema design, migrations, backup/restore strategies
-**Performance**: Optimization techniques, caching, profiling, scalability improvements
-**Incident Response**: Troubleshooting, debugging, root cause analysis, postmortem reviews
-**Documentation**: Technical writing, API docs, runbooks, architecture documentation
-**Project Management**: Sprint planning, estimation, agile practices, retrospectives
-**NLP Features**: Entity extraction, sentiment analysis, keyword extraction, intent classification, text normalization
-
-I now include advanced NLP capabilities for better understanding of your queries. Ask me about any specific topic and I'll provide actionable guidance!`;
-    } else if (lowerPrompt.includes('ai') && lowerPrompt.includes('use')) {
-      response = 'Effective AI adoption starts by identifying repetitive or data-heavy workflows, wrapping them with reliable automation, and keeping humans in the loop for review. Start small, measure outcomes, then scale what works.';
-    } else if (lowerPrompt.includes('language model') || lowerPrompt.includes('llm')) {
-      response = 'This chat uses a lightweight built-in assistant by default. Provide a HUGGINGFACE_API_KEY in the backend .env to unlock hosted models like Llama 3.1 or Mistral via the Hugging Face router.';
-    } else if (lowerPrompt.includes('rag')) {
-      response = 'Retrieval-Augmented Generation (RAG) combines document search with an LLM. Upload files to the RAG storage and the backend will blend those snippets into the prompt. This app supports both GitHub code search and local file storage for RAG.';
-    } else if (lowerPrompt.includes('deploy') || lowerPrompt.includes('docker') || lowerPrompt.includes('ci/cd')) {
-      response = 'For deployment: This app uses Docker Compose for orchestration. Run `docker compose up -d` for 24/7 availability with auto-restart. Check health at `/health`, monitor with `/metrics`. CI/CD pipeline includes tests, Docker builds, and security scanning. See DEPLOYMENT_GUIDE.md for details.';
-    } else if (lowerPrompt.includes('security') || lowerPrompt.includes('vulnerability')) {
-      response = 'Security features in this app: Helmet.js for security headers, rate limiting (100 req/15min), input validation with Joi, secrets via environment variables, Trivy scanning in CI/CD. Always run `npm audit` before deployment and keep dependencies updated.';
-    } else if (lowerPrompt.includes('monitor') || lowerPrompt.includes('logs') || lowerPrompt.includes('metrics')) {
-      response = 'Monitoring setup: Prometheus metrics at `/metrics`, Winston logs in `backend/logs/`, health checks at `/health`. View logs with `tail -f backend/logs/combined.log` or `docker compose logs -f`. Set up Grafana dashboards for visualization.';
-    } else if (lowerPrompt.includes('test') || lowerPrompt.includes('testing')) {
-      response = 'Testing: Jest + Supertest for backend (current coverage 47%, target 80%+). Run `npm test` in backend directory. Add integration tests for new endpoints. Consider Playwright/Cypress for E2E tests. Test-driven development recommended.';
-    } else if (lowerPrompt.includes('database') || lowerPrompt.includes('sql')) {
-      response = 'Database operations: Currently using file-based RAG storage. For production, consider PostgreSQL with Prisma ORM. Focus on schema design, indexing, query optimization, connection pooling, and automated backups with tested restoration procedures.';
-    } else if (lowerPrompt.includes('performance') || lowerPrompt.includes('optimize')) {
-      response = 'Performance optimization: Check metrics at `/metrics` for slow endpoints. Implement Redis caching, database indexing, code profiling. Use connection pooling, pagination, and streaming for large datasets. Monitor CPU, memory, and event loop lag.';
-    } else if (prompt.length < 80) {
-      response = `Here\'s a quick thought: ${prompt.trim()} -> consider the goal, the data you have, and the user journey you want to support. For technical implementations, verify security, add tests, and monitor performance.`;
-    } else {
-      response = 'Thanks for the detailed prompt! A concise plan would be:\n1. Clarify the objective and success criteria.\n2. Break the work into small experiments or PRs.\n3. Add tests and monitoring.\n4. Deploy incrementally and measure results.\n5. Iterate based on feedback.\n\nAsk if you\'d like deeper guidance on any step.';
-    }
+    // Use TinyLLM for generation
+    response = await tinyLLM.generate(prompt);
 
     const { inline, extra } = prepareNotices(model, options);
     response = composeContent(response, inline);
