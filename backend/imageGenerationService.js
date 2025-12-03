@@ -3,7 +3,6 @@ const logger = require('./logger');
 
 class ImageGenerationService {
     constructor() {
-        this.hfToken = process.env.HUGGINGFACE_API_KEY || process.env.HF_TOKEN;
         this.openaiKey = process.env.OPENAI_API_KEY;
     }
 
@@ -19,13 +18,7 @@ class ImageGenerationService {
             }
         }
 
-        if (provider === 'auto' || provider === 'huggingface') {
-            if (this.hfToken) {
-                return await this.generateWithHuggingFace(prompt);
-            }
-        }
-
-        throw new Error('No image generation provider available');
+        throw new Error('No image generation provider available (OpenAI key not configured)');
     }
 
     async generateWithOpenAI(prompt) {
@@ -49,23 +42,6 @@ class ImageGenerationService {
         return `data:image/png;base64,${b64}`;
     }
 
-    async generateWithHuggingFace(prompt) {
-        const model = 'stabilityai/stable-diffusion-xl-base-1.0';
-        const response = await axios.post(
-            `https://api-inference.huggingface.co/models/${model}`,
-            { inputs: prompt },
-            {
-                headers: {
-                    'Authorization': `Bearer ${this.hfToken}`,
-                    'Content-Type': 'application/json'
-                },
-                responseType: 'arraybuffer'
-            }
-        );
-
-        const b64 = Buffer.from(response.data, 'binary').toString('base64');
-        return `data:image/jpeg;base64,${b64}`;
-    }
 }
 
 module.exports = new ImageGenerationService();

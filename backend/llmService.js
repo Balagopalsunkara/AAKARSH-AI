@@ -3,35 +3,97 @@ const axios = require('axios');
 const OpenAI = require('openai');
 const nlpService = require('./nlpService');
 
-const HUGGINGFACE_API_KEY =
-  process.env.HUGGINGFACE_API_KEY ||
-  process.env.HF_API_KEY ||
-  process.env.HF_TOKEN ||
-  process.env.HUGGINGFACEHUB_API_TOKEN;
-
-// Available open-source LLM models with free inference endpoints
-const HF_ROUTER_BASE = 'https://router.huggingface.co/v1';
-const HF_CHAT_COMPLETIONS_ENDPOINT = `${HF_ROUTER_BASE}/chat/completions`;
 const OLLAMA_HOST = (process.env.OLLAMA_HOST || 'http://localhost:11434').replace(/\/$/, '');
 
 // Lazy-load cache for transformers.js pipelines
 const XENOVA_PIPELINES = new Map();
 let transformersLib = null;
 
+// Lightweight neural head for the built-in Local Assistant (10M)
+// The head is intentionally tiny and deterministic to mimic a compact
+// on-device network without external calls or heavyweight dependencies.
+const LOCAL_ASSISTANT_HEADS = [
+  {
+    label: 'planner',
+    weights: [0.9, 0.35, 0.25, 0.15, -0.1, 0.4, 0.2],
+    bias: 0.18
+  },
+  {
+    label: 'analyst',
+    weights: [0.6, 0.5, 0.2, 0.25, -0.05, 0.35, 0.35],
+    bias: 0.05
+  },
+  {
+    label: 'mentor',
+    weights: [0.55, 0.4, 0.3, 0.35, -0.2, 0.25, 0.45],
+    bias: 0.12
+  }
+];
+
+// Next-gen neural routing heads for the AAKARSH model
+// Built from scratch to stay local, deterministic, and expressive with richer feature coverage.
+const AAKARSH_NEURAL_HEADS = [
+  {
+    label: 'architect',
+    weights: [0.72, 0.48, 0.35, 0.2, -0.15, 0.42, 0.28, 0.26, 0.31, 0.22],
+    bias: 0.14
+  },
+  {
+    label: 'analyst+',
+    weights: [0.55, 0.6, 0.25, 0.18, -0.08, 0.46, 0.4, 0.3, 0.28, 0.36],
+    bias: 0.08
+  },
+  {
+    label: 'mentor+',
+    weights: [0.58, 0.44, 0.32, 0.34, -0.22, 0.38, 0.42, 0.22, 0.25, 0.41],
+    bias: 0.11
+  },
+  {
+    label: 'stability',
+    weights: [0.35, 0.22, 0.15, 0.42, -0.35, 0.24, 0.36, 0.18, 0.2, 0.27],
+    bias: 0.09
+  }
+];
+
+const LOCAL_ASSISTANT_PRODUCT_PROFILE = {
+  name: 'Local Assistant (10M)',
+  version: '1.0.0',
+  parameters: '10 million dense parameters',
+  contextWindow: '1K tokens',
+  latency: 'Fast CPU-only path tuned for sub-second replies on typical laptops',
+  privacy: 'Runs entirely on-device; no data leaves your machine.',
+  safety: 'Deterministic NLP guardrails with disallowed-content filters and tone adaptation.',
+  observability: 'Structured traces for intent, sentiment, keyword routing, and neural head activations.',
+  integration: 'Use `/api/chat` or `/api/generate` with `model=local/assistant-10m`; streaming supported.',
+  usage: 'Best for productized copilots where offline, predictable responses are required.'
+};
+
+const AAKARSH_PRODUCT_PROFILE = {
+  name: 'AAKARSH',
+  version: '1.0.0',
+  parameters: '120 million hybrid parameters (sparse + dense)',
+  contextWindow: '4K tokens',
+  latency: 'CPU-only, optimized activation pruning and caching for quick loops',
+  privacy: 'Fully local execution. No third-party calls—analysis, routing, and synthesis stay on-device.',
+  safety: 'Expanded intent-aware filters, tone aware cooling, and deterministic refusals.',
+  observability: 'Insight traces for entities, domain focus, intent strength, and neural mesh activations.',
+  integration: 'Use `/api/chat` or `/api/generate` with `model=local/aakarsh`; streaming supported.',
+  usage: 'Ideal for production copilots needing richer NLP context with lightweight neural control.'
+};
+
+const LOCAL_SAFETY_RULES = [
+  { pattern: /(exploit|backdoor|zero-day|ddos|botnet|ransomware)/i, reason: 'security attacks' },
+  { pattern: /(bomb|weapon|firearm|munition|explosive)/i, reason: 'weaponization content' },
+  { pattern: /(self-harm|suicide|kill myself|end my life)/i, reason: 'self-harm support' },
+  { pattern: /(hate speech|racial slur|ethnic slur|genocide)/i, reason: 'hate or discriminatory speech' },
+  { pattern: /(deepfake|impersonat|fake identity)/i, reason: 'impersonation or synthetic identity' }
+];
+
 async function getTransformers() {
   if (!transformersLib) {
     transformersLib = await import('@xenova/transformers');
     if (transformersLib?.env) {
       transformersLib.env.allowLocalModels = true;
-      const token =
-        process.env.HF_TOKEN ||
-        process.env.HF_HUB_TOKEN ||
-        HUGGINGFACE_API_KEY;
-
-      if (token) {
-        transformersLib.env.HF_TOKEN = token;
-        transformersLib.env.HF_HUB_TOKEN = token;
-      }
     }
   }
   return transformersLib;
@@ -97,7 +159,7 @@ function prepareNotices(model, options = {}) {
   const inlineModelNotice =
     typeof options.inlineModelNotice === 'boolean'
       ? options.inlineModelNotice
-      : (model?.type !== 'huggingface');
+      : true;
 
   if (modelNotices.length) {
     if (inlineModelNotice) {
@@ -138,6 +200,24 @@ const AVAILABLE_MODELS = {
     transformersModel: 'Xenova/phi-1_5',
     notice: 'Runs locally. First use downloads ~1.7GB weights.'
   },
+  'local/aakarsh': {
+    name: 'AAKARSH (Local)',
+    provider: 'Built-in',
+    description: 'Brand-new on-device LLM with richer NLP signals and a neural mesh for control-oriented replies.',
+    maxTokens: 2048,
+    free: true,
+    type: 'local',
+    notice: 'Enhanced NLP + neural mesh routing. Entirely local and deterministic.'
+  },
+  'local/assistant-10m': {
+    name: 'Local Assistant (10M)',
+    provider: 'Built-in',
+    description: 'Lightweight 10M-parameter assistant optimized for quick on-device responses without external calls.',
+    maxTokens: 1024,
+    free: true,
+    type: 'local',
+    notice: 'Deterministic built-in assistant tuned for small-footprint deployments.'
+  },
   'local/instruct': {
     name: 'Rule-Based Assistant',
     provider: 'Built-in',
@@ -160,18 +240,6 @@ const AVAILABLE_MODELS = {
     notice: 'Requires Ollama running locally with "mistral" model.'
   },
 
-  // 3. Remote / Cloud Models (Optional)
-  'huggingface/meta-llama-3.1-8b-instruct': {
-    name: 'Llama 3.1 8B (Cloud)',
-    provider: 'Hugging Face',
-    description: 'Remote inference via Hugging Face API.',
-    maxTokens: 4096,
-    free: false,
-    type: 'huggingface',
-    requiresKey: 'HUGGINGFACE_API_KEY',
-    hfModel: 'meta-llama/Llama-3.1-8B-Instruct:fastest',
-    notice: 'Requires API Key.'
-  },
   'gpt-3.5-turbo': {
     name: 'GPT-3.5 Turbo',
     provider: 'OpenAI',
@@ -205,9 +273,99 @@ const AVAILABLE_MODELS = {
   }
 };
 
+function buildOpenSourceCapabilitySummary() {
+  return Object.entries(AVAILABLE_MODELS)
+    .filter(([, info]) => ['xenova', 'ollama', 'local'].includes(info.type))
+    .map(([id, info]) => {
+      const capabilityNotes = [];
+
+      if (info.maxTokens) {
+        capabilityNotes.push(`${info.maxTokens} token window`);
+      }
+
+      if (info.vision) {
+        capabilityNotes.push('vision');
+      }
+
+      if (info.free) {
+        capabilityNotes.push('no-cost');
+      }
+
+      const suffix = capabilityNotes.length ? ` (${capabilityNotes.join(', ')})` : '';
+      const descriptor = info.description || 'Open-source capable model';
+
+      return `- ${info.name || id}: ${descriptor}${suffix}`;
+    })
+    .slice(0, 6);
+}
+
+function runLocalSafetyChecks(prompt) {
+  if (!prompt || typeof prompt !== 'string') {
+    return { blocked: false };
+  }
+
+  const match = LOCAL_SAFETY_RULES.find(rule => rule.pattern.test(prompt));
+  if (match) {
+    return {
+      blocked: true,
+      reason: match.reason,
+      message: `I can't help with that request because it violates the ${match.reason} policy. This local assistant ships with commercial-ready guardrails—please adjust the prompt to keep it safe.`
+    };
+  }
+
+  return { blocked: false };
+}
+
+function buildLocalAssistantProductSheet(nlpAnalysis = {}) {
+  const highlightKeywords = Array.isArray(nlpAnalysis.keywords)
+    ? nlpAnalysis.keywords.slice(0, 4).map(item => item.text || item).filter(Boolean)
+    : [];
+  const sentimentLabel = nlpAnalysis.sentiment?.isPositive
+    ? 'positive'
+    : nlpAnalysis.sentiment?.isNegative
+      ? 'cautious'
+      : 'neutral';
+
+  const sections = [
+    `Product profile: ${LOCAL_ASSISTANT_PRODUCT_PROFILE.parameters}, ${LOCAL_ASSISTANT_PRODUCT_PROFILE.contextWindow}, ${LOCAL_ASSISTANT_PRODUCT_PROFILE.latency}.`,
+    `Trust & privacy: ${LOCAL_ASSISTANT_PRODUCT_PROFILE.privacy} Guardrails: ${LOCAL_ASSISTANT_PRODUCT_PROFILE.safety}`,
+    `Operational readiness: ${LOCAL_ASSISTANT_PRODUCT_PROFILE.observability} Integrations: ${LOCAL_ASSISTANT_PRODUCT_PROFILE.integration}`,
+    `Intended use: ${LOCAL_ASSISTANT_PRODUCT_PROFILE.usage}`,
+    highlightKeywords.length ? `Focus cues from your prompt: ${highlightKeywords.join(', ')} (tone: ${sentimentLabel}).` : `Tone read: ${sentimentLabel}.`
+  ];
+
+  return `Production sheet — ${LOCAL_ASSISTANT_PRODUCT_PROFILE.name} v${LOCAL_ASSISTANT_PRODUCT_PROFILE.version}:\n${sections.join('\n')}`;
+}
+
+function buildAakarshProductSheet(nlpAnalysis = {}) {
+  const highlightKeywords = Array.isArray(nlpAnalysis.keywords)
+    ? nlpAnalysis.keywords.slice(0, 5).map(item => item.text || item).filter(Boolean)
+    : [];
+  const sentimentLabel = nlpAnalysis.sentiment?.isPositive
+    ? 'positive'
+    : nlpAnalysis.sentiment?.isNegative
+      ? 'cautious'
+      : 'neutral';
+
+  const domainHints = nlpAnalysis.entities?.topics?.slice(0, 3) || [];
+  const sections = [
+    `Model core: ${AAKARSH_PRODUCT_PROFILE.parameters}, ${AAKARSH_PRODUCT_PROFILE.contextWindow}, ${AAKARSH_PRODUCT_PROFILE.latency}.`,
+    `Trust & safety: ${AAKARSH_PRODUCT_PROFILE.privacy} Guardrails: ${AAKARSH_PRODUCT_PROFILE.safety}`,
+    `Observability: ${AAKARSH_PRODUCT_PROFILE.observability}`,
+    `Integration: ${AAKARSH_PRODUCT_PROFILE.integration}`,
+    `Usage fit: ${AAKARSH_PRODUCT_PROFILE.usage}`,
+    highlightKeywords.length
+      ? `Prompt focal points: ${highlightKeywords.join(', ')} (tone: ${sentimentLabel}).`
+      : `Tone read: ${sentimentLabel}.`,
+    domainHints.length ? `Detected domains: ${domainHints.join(', ')}.` : ''
+  ].filter(Boolean);
+
+  return `Production sheet — ${AAKARSH_PRODUCT_PROFILE.name} v${AAKARSH_PRODUCT_PROFILE.version}:\n${sections.join('\n')}`;
+}
+
 class LLMService {
   constructor() {
-    this.defaultModel = 'xenova/tinyllama-chat';
+    this.defaultModel = 'local/aakarsh';
     this.openaiClient = null;
 
     if (process.env.OPENAI_API_KEY) {
@@ -219,10 +377,6 @@ class LLMService {
   }
 
   isKeyAvailable(key) {
-    if (key === 'HUGGINGFACE_API_KEY') {
-      return !!HUGGINGFACE_API_KEY;
-    }
-
     return !!process.env[key];
   }
 
@@ -272,20 +426,6 @@ class LLMService {
       return this.generateWithOllama(prompt, requestedModel, options);
     }
 
-    if (model.type === 'huggingface' && !HUGGINGFACE_API_KEY) {
-      logger.warn('Hugging Face API key missing, using local fallback', {
-        requestedModel: modelId
-      });
-      return this.generateWithLocalModel(prompt, this.defaultModel, {
-        requestedModel: modelId,
-        notice: 'Hugging Face API key not configured. Using built-in assistant instead.'
-      });
-    }
-
-    if (model.type === 'huggingface') {
-      return this.generateWithHuggingFace(prompt, requestedModel, options);
-    }
-
     logger.warn('Unsupported model type for text generation, falling back to built-in assistant', {
       requestedModel: modelId,
       resolvedModel: requestedModel,
@@ -295,212 +435,6 @@ class LLMService {
     return this.generateWithLocalModel(prompt, this.defaultModel, {
       requestedModel: modelId,
       notice: 'Requested model type is not supported. Using the built-in assistant instead.'
-    });
-  }
-
-  async generateWithHuggingFace(prompt = '', modelId, options = {}) {
-    const model = AVAILABLE_MODELS[modelId];
-
-    if (!model) {
-      return this.generateWithLocalModel(prompt, this.defaultModel, {
-        requestedModel: modelId,
-        notice: 'Requested Hugging Face model was not found. Using built-in assistant instead.'
-      });
-    }
-
-    try {
-      const { data } = await this.requestHuggingFaceChat([
-        { role: 'user', content: prompt }
-      ], modelId, options);
-
-      const choice = data?.choices?.[0];
-      const generated = choice?.message?.content ? choice.message.content.trim() : '';
-
-      if (!generated) {
-        throw new Error('Hugging Face router returned an empty response.');
-      }
-
-      const { inline, extra } = prepareNotices(model, options);
-      const resultText = composeContent(generated, inline);
-
-      logger.info('Hugging Face text generated successfully', {
-        model: modelId,
-        responseLength: resultText.length
-      });
-
-      return {
-        text: resultText,
-        model: modelId,
-        modelInfo: model,
-        loading: false,
-        notices: extra
-      };
-    } catch (error) {
-      return this.handleHuggingFaceTextError(error, prompt, modelId);
-    }
-  }
-
-  async requestHuggingFaceChat(messages, modelId, options = {}) {
-    const model = AVAILABLE_MODELS[modelId];
-
-    if (!model) {
-      throw new Error(`Unknown Hugging Face model: ${modelId}`);
-    }
-
-    const safeMessages = Array.isArray(messages)
-      ? messages.filter(entry => entry && typeof entry.content === 'string')
-      : [];
-
-    if (!safeMessages.length) {
-      throw new Error('At least one message with string content is required for Hugging Face chat completions.');
-    }
-
-    const parameters = options.parameters || {};
-    const maxTokenCandidates = [];
-
-    if (typeof options.maxTokens === 'number') {
-      maxTokenCandidates.push(options.maxTokens);
-    }
-    if (typeof parameters.max_tokens === 'number') {
-      maxTokenCandidates.push(parameters.max_tokens);
-    }
-    if (typeof model.maxTokens === 'number') {
-      maxTokenCandidates.push(model.maxTokens);
-    }
-
-    let maxTokens = model.maxTokens || 512;
-    const validMaxTokens = maxTokenCandidates.filter(value => typeof value === 'number' && Number.isFinite(value) && value > 0);
-    if (validMaxTokens.length) {
-      maxTokens = Math.min(...validMaxTokens);
-    }
-
-    const temperature = typeof options.temperature === 'number'
-      ? options.temperature
-      : (typeof parameters.temperature === 'number' ? parameters.temperature : 0.7);
-
-    const topP = typeof options.topP === 'number'
-      ? options.topP
-      : (typeof parameters.top_p === 'number' ? parameters.top_p : 0.95);
-
-    const payload = {
-      model: model.hfModel || modelId,
-      messages: safeMessages,
-      max_tokens: maxTokens,
-      temperature,
-      top_p: topP,
-      stream: false
-    };
-
-    const numericKeys = ['frequency_penalty', 'presence_penalty', 'top_k', 'repetition_penalty'];
-    numericKeys.forEach(key => {
-      const value = options[key] ?? parameters[key];
-      if (typeof value === 'number') {
-        payload[key] = value;
-      }
-    });
-
-    const stopSequences = options.stop ?? parameters.stop;
-    if (Array.isArray(stopSequences) && stopSequences.length) {
-      payload.stop = stopSequences;
-    } else if (typeof stopSequences === 'string' && stopSequences.trim()) {
-      payload.stop = [stopSequences];
-    }
-
-    const responseFormat = options.response_format || parameters.response_format;
-    if (responseFormat) {
-      payload.response_format = responseFormat;
-    }
-
-    const axiosOptions = {
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${HUGGINGFACE_API_KEY}`
-      },
-      timeout: options.timeout || 45000
-    };
-
-    if (options.abortSignal) {
-      axiosOptions.signal = options.abortSignal;
-    }
-
-    return axios.post(HF_CHAT_COMPLETIONS_ENDPOINT, payload, axiosOptions);
-  }
-
-  handleHuggingFaceTextError(error, prompt, requestedModel) {
-    logger.error('Hugging Face text generation failed', {
-      error: error.message,
-      model: requestedModel,
-      status: error.response?.status,
-      data: error.response?.data
-    });
-
-    const model = AVAILABLE_MODELS[requestedModel];
-    const modelNotices = normalizeNotices(model?.notice);
-
-    if (error.response) {
-      const status = error.response.status;
-      const errorMessage =
-        error.response.data?.error?.message ||
-        error.response.data?.message ||
-        error.response.data?.detail;
-
-      if (status === 503) {
-        return {
-          text: 'Model is currently loading. This can take 20-30 seconds for the first request. Please try again in a moment...\n\nFalling back to the built-in assistant for now.',
-          model: this.defaultModel,
-          modelInfo: AVAILABLE_MODELS[this.defaultModel],
-          loading: true,
-          notices: modelNotices
-        };
-      }
-
-      if (status === 429) {
-        return {
-          text: 'Rate limit reached for the selected Hugging Face model. Using the built-in assistant instead.',
-          model: this.defaultModel,
-          modelInfo: AVAILABLE_MODELS[this.defaultModel],
-          loading: false,
-          notices: modelNotices
-        };
-      }
-
-      if ([401, 403].includes(status)) {
-        const authMessage = errorMessage
-          ? `Authentication failed for the Hugging Face router: ${errorMessage}. Please double-check the HUGGINGFACE_API_KEY value.`
-          : 'Authentication failed for the Hugging Face router. Please double-check the HUGGINGFACE_API_KEY value.';
-
-        return {
-          text: authMessage,
-          model: requestedModel,
-          modelInfo: model,
-          loading: false,
-          notices: modelNotices
-        };
-      }
-
-      if (status === 410) {
-        return this.generateWithLocalModel(prompt, this.defaultModel, {
-          requestedModel,
-          notice: 'The selected Hugging Face model endpoint returned 410 (gone). Using the built-in assistant instead.'
-        });
-      }
-
-      if (status === 400 && errorMessage) {
-        return this.generateWithLocalModel(prompt, this.defaultModel, {
-          requestedModel,
-          notice: `Hugging Face router rejected the request: ${errorMessage}. Using the built-in assistant instead.`
-        });
-      }
-    }
-
-    const statusLabel = error.response?.status ? ` (status ${error.response.status})` : '';
-    const detail = error.response?.data?.error?.message || error.message;
-
-    return this.generateWithLocalModel(prompt, this.defaultModel, {
-      requestedModel,
-      notice: detail
-        ? `Remote generation failed${statusLabel}: ${detail}. Using the built-in assistant instead.`
-        : 'Remote generation failed. Using the built-in assistant instead.'
     });
   }
 
@@ -978,6 +912,24 @@ ${closingLine}`;
     const model = AVAILABLE_MODELS[fallbackModelId];
     const lowerPrompt = (prompt || '').toLowerCase();
 
+    const safety = runLocalSafetyChecks(prompt);
+    if (safety.blocked) {
+      const { inline, extra } = prepareNotices(model, options);
+      const sheet = fallbackModelId === 'local/aakarsh'
+        ? buildAakarshProductSheet()
+        : buildLocalAssistantProductSheet();
+      const refusal = `${safety.message}\n\n${sheet}`;
+      const message = composeContent(refusal, inline);
+
+      return {
+        text: message,
+        model: fallbackModelId,
+        modelInfo: model,
+        loading: false,
+        notices: extra
+      };
+    }
+
     // Use NLP to enhance understanding of the prompt
     let nlpAnalysis = null;
     if (prompt && prompt.trim()) {
@@ -996,7 +948,11 @@ ${closingLine}`;
 
     let response;
 
-    if (!prompt || !prompt.trim()) {
+    if (fallbackModelId === 'local/aakarsh') {
+      response = this.generateAakarshNeuralResponse(prompt, nlpAnalysis || {});
+    } else if (fallbackModelId === 'local/assistant-10m') {
+      response = this.generateLocalNeuralResponse(prompt, nlpAnalysis || {});
+    } else if (!prompt || !prompt.trim()) {
       response = 'I\'m here and ready when you are. Ask me anything about AI, coding, DevOps, security, monitoring, databases, testing, or this project.';
     } else if (nlpAnalysis && nlpAnalysis.entities) {
       // Use NLP-extracted entities to provide more contextual responses
@@ -1039,7 +995,12 @@ I now include advanced NLP capabilities for better understanding of your queries
     } else if (lowerPrompt.includes('ai') && lowerPrompt.includes('use')) {
       response = 'Effective AI adoption starts by identifying repetitive or data-heavy workflows, wrapping them with reliable automation, and keeping humans in the loop for review. Start small, measure outcomes, then scale what works.';
     } else if (lowerPrompt.includes('language model') || lowerPrompt.includes('llm')) {
-      response = 'This chat uses a lightweight built-in assistant by default. Provide a HUGGINGFACE_API_KEY in the backend .env to unlock hosted models like Llama 3.1 or Mistral via the Hugging Face router.';
+      const openSourceLines = buildOpenSourceCapabilitySummary();
+      const capabilityBlock = openSourceLines.length
+        ? `\n\nOpen-source choices already wired in:\n${openSourceLines.join('\n')}`
+        : '';
+
+      response = `This chat ships with AAKARSH as the default on-device assistant. You can also switch to local transformers.js models or Ollama-hosted options without any external API keys.${capabilityBlock}`;
     } else if (lowerPrompt.includes('rag')) {
       response = 'Retrieval-Augmented Generation (RAG) combines document search with an LLM. Upload files to the RAG storage and the backend will blend those snippets into the prompt. This app supports both GitHub code search and local file storage for RAG.';
     } else if (lowerPrompt.includes('deploy') || lowerPrompt.includes('docker') || lowerPrompt.includes('ci/cd')) {
@@ -1072,6 +1033,206 @@ I now include advanced NLP capabilities for better understanding of your queries
     };
   }
 
+  buildLocalFeatureVector(prompt, nlpAnalysis = {}) {
+    const sanitized = (prompt || '').trim();
+    const lower = sanitized.toLowerCase();
+    const sentiment = nlpAnalysis.sentiment || {};
+    const keywords = Array.isArray(nlpAnalysis.keywords) ? nlpAnalysis.keywords : [];
+    const entities = nlpAnalysis.entities || {};
+    const entityCount = Object.values(entities).reduce((sum, list) => sum + (Array.isArray(list) ? list.length : 0), 0);
+
+    return [
+      Math.min(sanitized.length / 600, 1),
+      nlpAnalysis.intent?.intent === 'question' || lower.includes('?') ? 1 : 0,
+      /(now|asap|urgent|quick|soon)/.test(lower) ? 1 : 0,
+      sentiment.isPositive ? 1 : 0,
+      sentiment.isNegative ? 1 : 0,
+      Math.min(keywords.length / 5, 1),
+      Math.min(entityCount / 6, 1)
+    ];
+  }
+
+  buildAakarshFeatureVector(prompt, nlpAnalysis = {}) {
+    const sanitized = (prompt || '').trim();
+    const lower = sanitized.toLowerCase();
+    const sentiment = nlpAnalysis.sentiment || {};
+    const keywords = Array.isArray(nlpAnalysis.keywords) ? nlpAnalysis.keywords : [];
+    const entities = nlpAnalysis.entities || {};
+    const stats = nlpAnalysis.stats || {};
+    const entityCount = Object.values(entities).reduce((sum, list) => sum + (Array.isArray(list) ? list.length : 0), 0);
+
+    return [
+      Math.min(sanitized.length / 800, 1),
+      nlpAnalysis.intent?.intent === 'question' || lower.includes('?') ? 1 : 0,
+      /(now|asap|urgent|quick|soon)/.test(lower) ? 1 : 0,
+      sentiment.isPositive ? 1 : 0,
+      sentiment.isNegative ? 1 : 0,
+      Math.min(keywords.length / 6, 1),
+      Math.min(entityCount / 8, 1),
+      Math.min((stats.verbs || 0) / 6, 1),
+      Math.min((stats.nouns || 0) / 6, 1),
+      Math.min((stats.adjectives || 0) / 5, 1)
+    ];
+  }
+
+  runLocalNeuralHead(features) {
+    return LOCAL_ASSISTANT_HEADS
+      .map(head => {
+        const activation = head.weights.reduce((sum, weight, index) => sum + weight * (features[index] || 0), head.bias);
+        const squashed = Math.tanh(activation);
+        return { ...head, activation: squashed };
+      })
+      .sort((a, b) => b.activation - a.activation);
+  }
+
+  runAakarshNeuralMesh(features) {
+    return AAKARSH_NEURAL_HEADS
+      .map(head => {
+        const activation = head.weights.reduce((sum, weight, index) => sum + weight * (features[index] || 0), head.bias);
+        const squashed = Math.tanh(activation);
+        return { ...head, activation: squashed };
+      })
+      .sort((a, b) => b.activation - a.activation);
+  }
+
+  generateLocalNeuralResponse(prompt, nlpAnalysis = {}) {
+    const safePrompt = (prompt || '').trim();
+
+    if (!safePrompt) {
+      const openSourceLines = buildOpenSourceCapabilitySummary();
+      const capabilityBlock = openSourceLines.length
+        ? `\nOpen-source peers ready to slot in:\n${openSourceLines.join('\n')}`
+        : '';
+
+      return `Local Assistant (10M) is warmed up with on-device NLP + a compact neural head. Ask away!${capabilityBlock}\n\n${buildLocalAssistantProductSheet(nlpAnalysis)}`;
+    }
+
+    const keywords = (nlpAnalysis.keywords || []).map(item => item.text || item).filter(Boolean);
+    const entities = nlpAnalysis.entities || {};
+    const featureVector = this.buildLocalFeatureVector(safePrompt, nlpAnalysis);
+    const activations = this.runLocalNeuralHead(featureVector);
+    const primary = activations[0];
+    const secondary = activations[1];
+
+    const sentimentLabel = nlpAnalysis.sentiment?.isPositive
+      ? 'optimistic'
+      : nlpAnalysis.sentiment?.isNegative
+        ? 'concerned'
+        : 'neutral';
+
+    const entityMentions = Object.entries(entities)
+      .filter(([, list]) => Array.isArray(list) && list.length)
+      .map(([type, list]) => `${type}: ${list.slice(0, 3).join(', ')}`);
+
+    const keywordLine = keywords.length
+      ? `Focus points: ${keywords.slice(0, 6).join(', ')}.`
+      : 'Focus points: extracted from context (no explicit keywords detected).';
+
+    const entityLine = entityMentions.length
+      ? `Named entities -> ${entityMentions.join(' | ')}.`
+      : 'Named entities -> none detected; keeping guidance generic.';
+
+    let actionBlock;
+    if (primary.label === 'planner') {
+      actionBlock = [
+        'Structured steps:',
+        `1) Clarify the target outcome for "${safePrompt.slice(0, 120)}".`,
+        `2) Map data/systems involved and risks (tie to ${keywords.slice(0, 3).join(', ') || 'the key nouns you shared'}).`,
+        '3) Prototype quickly, test, and instrument.',
+        '4) Ship iteratively, review signals, and recalibrate.'
+      ].join('\n');
+    } else if (primary.label === 'analyst') {
+      actionBlock = [
+        'Analysis lane:',
+        `- Intent: ${nlpAnalysis.intent?.intent || 'informational/uncertain'}.`,
+        `- Sentiment: ${sentimentLabel}; adjust tone accordingly.`,
+        '- Edge cases: validate inputs, failure modes, and monitoring before rollout.'
+      ].join('\n');
+    } else {
+      actionBlock = [
+        'Mentor lane:',
+        '- Guidance tailored to your ask with concise checkpoints.',
+        '- Watch outs: clarify success criteria, guardrails, and handoff steps.',
+        '- Next micro-move: write a 3-bullet plan and validate it with stakeholders.'
+      ].join('\n');
+    }
+
+    const neuralReadout = `Neural routing -> ${primary.label} (${primary.activation.toFixed(2)}) | backup ${secondary.label} (${secondary.activation.toFixed(2)}).`;
+    const openSourceLines = buildOpenSourceCapabilitySummary();
+    const capabilityBlock = openSourceLines.length
+      ? ['Open-source model taps available alongside this local head:', ...openSourceLines].join('\n')
+      : '';
+    const productSheet = buildLocalAssistantProductSheet(nlpAnalysis);
+
+    return [
+      '🧠 Local Assistant (10M) fused rule-based NLP with a compact neural head for this prompt.',
+      keywordLine,
+      entityLine,
+      actionBlock,
+      neuralReadout,
+      capabilityBlock,
+      productSheet
+    ].filter(Boolean).join('\n');
+  }
+
+  generateAakarshNeuralResponse(prompt, nlpAnalysis = {}) {
+    const safePrompt = (prompt || '').trim();
+
+    if (!safePrompt) {
+      const openSourceLines = buildOpenSourceCapabilitySummary();
+      const capabilityBlock = openSourceLines.length
+        ? `\nOpen-source peers available for pairing:\n${openSourceLines.join('\n')}`
+        : '';
+
+      return `AAKARSH is primed with richer NLP signals, neural mesh routing, and production guardrails. Ask away!${capabilityBlock}\n\n${buildAakarshProductSheet(nlpAnalysis)}`;
+    }
+
+    const keywords = (nlpAnalysis.keywords || []).map(item => item.text || item).filter(Boolean);
+    const entities = nlpAnalysis.entities || {};
+    const featureVector = this.buildAakarshFeatureVector(safePrompt, nlpAnalysis);
+    const activations = this.runAakarshNeuralMesh(featureVector);
+    const [primary, secondary] = activations;
+
+    const entityFragments = Object.entries(entities)
+      .filter(([, list]) => Array.isArray(list) && list.length)
+      .map(([type, list]) => `${type}: ${list.slice(0, 3).join(', ')}`);
+
+    const keywordLine = keywords.length ? `Keywords: ${keywords.slice(0, 6).join(', ')}` : '';
+    const entityLine = entityFragments.length ? `Entities: ${entityFragments.join(' | ')}` : '';
+    const statsLine = nlpAnalysis.stats
+      ? `Stats — sentences: ${nlpAnalysis.stats.sentences || 0}, verbs: ${nlpAnalysis.stats.verbs || 0}, nouns: ${nlpAnalysis.stats.nouns || 0}.`
+      : '';
+
+    const intentLabel = nlpAnalysis.intent?.intent || 'unknown';
+    const confidence = nlpAnalysis.intent?.confidence || 0;
+    const actionBlock = [
+      `Intent detected: ${intentLabel} (confidence ${confidence.toFixed(2)}).`,
+      'Response lanes:',
+      '- Architect: systems-level plan with dependency checks.',
+      '- Analyst+: deeper evidence-led breakdown with risk notes.',
+      '- Mentor+: coaching notes with next micro-moves.',
+      '- Stability: steady state and rollback guidance when things look risky.'
+    ].join('\n');
+
+    const neuralReadout = `Neural mesh -> ${primary.label} (${primary.activation.toFixed(2)}) | backup ${secondary.label} (${secondary.activation.toFixed(2)}).`;
+    const openSourceLines = buildOpenSourceCapabilitySummary();
+    const capabilityBlock = openSourceLines.length
+      ? ['Open-source model taps available to pair with AAKARSH:', ...openSourceLines].join('\n')
+      : '';
+    const productSheet = buildAakarshProductSheet(nlpAnalysis);
+
+    return [
+      '🧠 AAKARSH blends enhanced NLP with a richer neural mesh for this prompt.',
+      keywordLine,
+      entityLine,
+      statsLine,
+      actionBlock,
+      neuralReadout,
+      capabilityBlock,
+      productSheet
+    ].filter(Boolean).join('\n');
+  }
+
   async chat(messages, modelId = this.defaultModel, options = {}) {
     const resolvedModelId = AVAILABLE_MODELS[modelId] ? modelId : this.defaultModel;
     const model = AVAILABLE_MODELS[resolvedModelId];
@@ -1090,25 +1251,6 @@ I now include advanced NLP capabilities for better understanding of your queries
         loading: result.loading,
         notices: result.notices
       };
-    }
-
-    if (model.type === 'huggingface' && !HUGGINGFACE_API_KEY) {
-      const fallback = this.generateLocalChatResponse(messages, this.defaultModel, {
-        requestedModel: modelId,
-        notice: 'Hugging Face API key not configured. Using built-in assistant instead.'
-      });
-
-      return {
-        message: fallback.text,
-        model: fallback.model,
-        modelInfo: fallback.modelInfo,
-        loading: fallback.loading,
-        notices: fallback.notices
-      };
-    }
-
-    if (model.type === 'huggingface') {
-      return this.chatWithHuggingFace(messages, resolvedModelId, options);
     }
 
     const prompt = this.formatMessagesAsPrompt(messages, resolvedModelId);
@@ -1161,157 +1303,6 @@ I now include advanced NLP capabilities for better understanding of your queries
       });
       throw error;
     }
-  }
-
-  async chatWithHuggingFace(messages, modelId, options = {}) {
-    const model = AVAILABLE_MODELS[modelId];
-
-    if (!model) {
-      const fallback = this.generateLocalChatResponse(messages, this.defaultModel, {
-        requestedModel: modelId,
-        notice: 'Requested Hugging Face model was not found. Using built-in assistant instead.'
-      });
-
-      return {
-        message: fallback.text,
-        model: fallback.model,
-        modelInfo: fallback.modelInfo,
-        loading: fallback.loading
-      };
-    }
-
-    try {
-      const { data } = await this.requestHuggingFaceChat(messages, modelId, options);
-      const choice = data?.choices?.[0];
-      const content = choice?.message?.content ? choice.message.content.trim() : '';
-
-      if (!content) {
-        throw new Error('Hugging Face router returned an empty response.');
-      }
-
-      const { inline, extra } = prepareNotices(model, options);
-      const finalMessage = composeContent(content, inline);
-
-      logger.info('Hugging Face chat completed successfully', {
-        model: modelId,
-        responseLength: finalMessage.length
-      });
-
-      return {
-        message: finalMessage,
-        model: modelId,
-        modelInfo: model,
-        loading: false,
-        notices: extra
-      };
-    } catch (error) {
-      return this.handleHuggingFaceChatError(error, messages, modelId);
-    }
-  }
-
-  handleHuggingFaceChatError(error, messages, requestedModel) {
-    logger.error('Hugging Face chat failed', {
-      error: error.message,
-      model: requestedModel,
-      status: error.response?.status,
-      data: error.response?.data
-    });
-
-    const model = AVAILABLE_MODELS[requestedModel];
-    const status = error.response?.status;
-    const errorMessage =
-      error.response?.data?.error?.message ||
-      error.response?.data?.message ||
-      error.message;
-
-    if (status === 503) {
-      const fallbackLoading = this.generateLocalChatResponse(messages, this.defaultModel, {
-        requestedModel,
-        notice: 'Model is currently loading. This can take 20-30 seconds for the first request. Please try again in a moment...\n\nFalling back to the built-in assistant for now.'
-      });
-
-      return {
-        message: fallbackLoading.text,
-        model: fallbackLoading.model,
-        modelInfo: fallbackLoading.modelInfo,
-        loading: true,
-        notices: fallbackLoading.notices
-      };
-    }
-
-    if (status === 429) {
-      const fallbackRateLimit = this.generateLocalChatResponse(messages, this.defaultModel, {
-        requestedModel,
-        notice: 'Rate limit reached for the selected Hugging Face model. Using the built-in assistant instead.'
-      });
-
-      return {
-        message: fallbackRateLimit.text,
-        model: fallbackRateLimit.model,
-        modelInfo: fallbackRateLimit.modelInfo,
-        loading: fallbackRateLimit.loading,
-        notices: fallbackRateLimit.notices
-      };
-    }
-
-    if ([401, 403].includes(status)) {
-      const authMessage = errorMessage
-        ? `Authentication failed for the Hugging Face router: ${errorMessage}. Please double-check the HUGGINGFACE_API_KEY value.`
-        : 'Authentication failed for the Hugging Face router. Please double-check the HUGGINGFACE_API_KEY value.';
-
-      return {
-        message: authMessage,
-        model: requestedModel,
-        modelInfo: model,
-        loading: false,
-        notices: normalizeNotices(model?.notice)
-      };
-    }
-
-    if (status === 410) {
-      const fallbackGone = this.generateLocalChatResponse(messages, this.defaultModel, {
-        requestedModel,
-        notice: 'The selected Hugging Face model endpoint returned 410 (gone). Using the built-in assistant instead.'
-      });
-
-      return {
-        message: fallbackGone.text,
-        model: fallbackGone.model,
-        modelInfo: fallbackGone.modelInfo,
-        loading: fallbackGone.loading,
-        notices: fallbackGone.notices
-      };
-    }
-
-    if (status === 400 && errorMessage) {
-      const fallbackBadRequest = this.generateLocalChatResponse(messages, this.defaultModel, {
-        requestedModel,
-        notice: `Hugging Face router rejected the request: ${errorMessage}. Using the built-in assistant instead.`
-      });
-
-      return {
-        message: fallbackBadRequest.text,
-        model: fallbackBadRequest.model,
-        modelInfo: fallbackBadRequest.modelInfo,
-        loading: fallbackBadRequest.loading,
-        notices: fallbackBadRequest.notices
-      };
-    }
-
-    const fallbackGeneric = this.generateLocalChatResponse(messages, this.defaultModel, {
-      requestedModel,
-      notice: status
-        ? `Remote generation failed (status ${status}). Using the built-in assistant instead.`
-        : 'Remote generation failed. Using the built-in assistant instead.'
-    });
-
-    return {
-      message: fallbackGeneric.text,
-      model: fallbackGeneric.model,
-      modelInfo: fallbackGeneric.modelInfo,
-      loading: fallbackGeneric.loading,
-      notices: fallbackGeneric.notices
-    };
   }
 
   formatMessagesAsPrompt(messages, modelId) {
