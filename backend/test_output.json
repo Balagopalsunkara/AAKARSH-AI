@@ -2,181 +2,181 @@
   {
     "id": 1,
     "prompt": "Who are you?",
-    "response": "Regarding \"you?\" - that's an interesting topic. I can help you write code, debug issues, or document features related to it.",
-    "duration": 151
+    "response": "Regarding \"you?\" - I can help you explore this concept, write code for it, or troubleshoot issues. What's your main goal?",
+    "duration": 663
   },
   {
     "id": 2,
     "prompt": "Are you a real person?",
-    "response": "Regarding \"you\" - that's an interesting topic. I can help you write code, debug issues, or document features related to it.",
-    "duration": 41
+    "response": "Regarding \"you\" - I can help you explore this concept, write code for it, or troubleshoot issues. What's your main goal?",
+    "duration": 142
   },
   {
     "id": 3,
     "prompt": "What can you do?",
-    "response": "I can help with coding, system operations, debugging, and general questions. I use advanced NLP to understand your intent.",
-    "duration": 34
+    "response": "I can help with coding (JavaScript, React, Python), DevOps (Docker, CI/CD, Kubernetes), debugging, system operations, and general technical questions. I use advanced NLP to understand your intent.",
+    "duration": 139
   },
   {
     "id": 4,
     "prompt": "How do you work?",
-    "response": "To achieve that, you typically need to break it down into steps. I can help you plan the implementation if you give me more details.",
-    "duration": 36
+    "response": "I analyze your input using NLP (compromise.js) to extract intent, entities, and keywords. Then I match against my knowledge base or construct contextual responses. All processing is local and instant.",
+    "duration": 121
   },
   {
     "id": 5,
     "prompt": "How do I write a function in javascript?",
-    "response": "To achieve that, you typically need to break it down into steps. I can help you plan the implementation if you give me more details.",
-    "duration": 53
+    "response": "In JavaScript, you can define functions in several ways:\n1. Function declaration: `function myFunc() { }`\n2. Arrow function: `const myFunc = () => { }`\n3. Function expression: `const myFunc = function() { }`\n\nArrow functions are preferred for concise syntax and lexical `this` binding.",
+    "duration": 141
   },
   {
     "id": 6,
     "prompt": "Explain async await",
-    "response": "Async/await is syntactic sugar for Promises. Use `async` before a function and `await` before a Promise to pause execution until it resolves.",
-    "duration": 35
+    "response": "Async/await is syntactic sugar for Promises. Use `async` before a function to make it return a Promise, and `await` inside to pause execution until a Promise resolves:\n```javascript\nasync function fetchData() {\n  const data = await fetch(url);\n  return data.json();\n}\n```",
+    "duration": 111
   },
   {
     "id": 7,
     "prompt": "What is a react component?",
-    "response": "You're asking about \"a react component?\". While I don't have a specific definition for that yet, I can help you look it up or analyze code related to it.",
-    "duration": 45
+    "response": "React components are building blocks of UI. Functional components are preferred:\n```javascript\nconst MyComponent = ({ props }) => {\n  return <div>{props.text}</div>;\n}\n```\nUse hooks like `useState` and `useEffect` for state and side effects.",
+    "duration": 96
   },
   {
     "id": 8,
     "prompt": "How do REST APIs work?",
-    "response": "To achieve that, you typically need to break it down into steps. I can help you plan the implementation if you give me more details.",
-    "duration": 38
+    "response": "I analyze your input using NLP (compromise.js) to extract intent, entities, and keywords. Then I match against my knowledge base or construct contextual responses. All processing is local and instant.",
+    "duration": 94
   },
   {
     "id": 9,
     "prompt": "Show me a python loop",
-    "response": "I'll help you show with me, a python loop. What's the first step you'd like to take?",
-    "duration": 39
+    "response": "Python loops:\n```python\n# For loop\nfor i in range(10):\n    print(i)\n\n# While loop\nwhile condition:\n    do_something()\n\n# List comprehension\nresult = [x*2 for x in range(10)]\n```",
+    "duration": 85
   },
   {
     "id": 10,
     "prompt": "What is a variable?",
-    "response": "You're asking about \"a variable?\". While I don't have a specific definition for that yet, I can help you look it up or analyze code related to it.",
-    "duration": 27
+    "response": "Variables store data. Use `const` for constants, `let` for mutable values, avoid `var`. Example: `const name = 'value';`",
+    "duration": 74
   },
   {
     "id": 11,
     "prompt": "What is docker?",
-    "response": "You're asking about \"docker?\". While I don't have a specific definition for that yet, I can help you look it up or analyze code related to it.",
-    "duration": 44
+    "response": "Docker is a containerization platform. It packages applications with dependencies into portable containers. Use `Dockerfile` to define images and `docker-compose` for multi-container apps.",
+    "duration": 159
   },
   {
     "id": 12,
     "prompt": "Explain CI/CD pipelines",
-    "response": "I'll help you explain with CI/CD pipelines. What's the first step you'd like to take?",
-    "duration": 38
+    "response": "CI/CD automates software delivery:\n- **CI (Continuous Integration)**: Automatically test code on each commit\n- **CD (Continuous Deployment)**: Automatically deploy to production\n\nPopular tools: GitHub Actions, Jenkins, GitLab CI, CircleCI. Pipeline stages: build → test → deploy.",
+    "duration": 209
   },
   {
     "id": 13,
     "prompt": "What is kubernetes used for?",
-    "response": "You're asking about \"kubernetes\". While I don't have a specific definition for that yet, I can help you look it up or analyze code related to it.",
-    "duration": 39
+    "response": "Kubernetes (K8s) orchestrates containerized applications across clusters. Key concepts:\n- **Pods**: Smallest deployable units\n- **Services**: Expose pods to network\n- **Deployments**: Manage pod replicas\n- **ConfigMaps/Secrets**: Configuration management\n\nUse `kubectl` CLI to manage clusters.",
+    "duration": 285
   },
   {
     "id": 14,
     "prompt": "How do I deploy to AWS?",
-    "response": "To achieve that, you typically need to break it down into steps. I can help you plan the implementation if you give me more details.",
-    "duration": 32
+    "response": "Deployment involves releasing code to production. Use CI/CD pipelines, Docker for consistency, and rolling updates to minimize downtime.",
+    "duration": 124
   },
   {
     "id": 15,
     "prompt": "Hello there",
-    "response": "Regarding \"there\" - that's an interesting topic. I can help you write code, debug issues, or document features related to it.",
-    "duration": 31
+    "response": "Hello! How can I assist you with your project today? I can help with coding, DevOps, debugging, or technical questions.",
+    "duration": 93
   },
   {
     "id": 16,
     "prompt": "Good morning",
-    "response": "Regarding \"Good morning\" - that's an interesting topic. I can help you write code, debug issues, or document features related to it.",
-    "duration": 24
+    "response": "Good morning! Let's start the day with some productive coding or problem-solving.",
+    "duration": 117
   },
   {
     "id": 17,
     "prompt": "Thank you very much",
-    "response": "I'll help you thank with you. What's the first step you'd like to take?",
-    "duration": 24
+    "response": "You're welcome! Let me know if you need anything else.",
+    "duration": 67
   },
   {
     "id": 18,
     "prompt": "Goodbye",
-    "response": "I'm listening. Tell me more about what you're working on.",
-    "duration": 20
+    "response": "See you later! Keep building great things.",
+    "duration": 52
   },
   {
     "id": 19,
     "prompt": "Tell me a joke",
-    "response": "I'll help you tell with me, a joke. What's the first step you'd like to take?",
-    "duration": 29
+    "response": "Regarding \"me\" - I can help you explore this concept, write code for it, or troubleshoot issues. What's your main goal?",
+    "duration": 84
   },
   {
     "id": 20,
     "prompt": "Analyze this text: The quick brown fox jumps over the lazy dog.",
-    "response": "I'll help you analyze with this text:, The quick brown fox, over the lazy dog.. What's the first step you'd like to take?",
-    "duration": 45
+    "response": "Regarding \"this text:\" - I can help you explore this concept, write code for it, or troubleshoot issues. What's your main goal?",
+    "duration": 108
   },
   {
     "id": 21,
     "prompt": "Extract entities from: Elon Musk works at SpaceX in California.",
-    "response": "Regarding \"California.\" - that's an interesting topic. I can help you write code, debug issues, or document features related to it.",
-    "duration": 30
+    "response": "California. - interesting! Are you working on something location-specific or just providing context?",
+    "duration": 62
   },
   {
     "id": 22,
     "prompt": "Is this positive? I love coding so much!",
-    "response": "Regarding \"I\" - that's an interesting topic. I can help you write code, debug issues, or document features related to it.",
-    "duration": 38
+    "response": "Regarding \"I\" - I can help you explore this concept, write code for it, or troubleshoot issues. What's your main goal?",
+    "duration": 106
   },
   {
     "id": 23,
     "prompt": "Is this negative? I hate bugs.",
-    "response": "Regarding \"I\" - that's an interesting topic. I can help you write code, debug issues, or document features related to it.",
-    "duration": 37
+    "response": "Regarding \"I\" - I can help you explore this concept, write code for it, or troubleshoot issues. What's your main goal?",
+    "duration": 109
   },
   {
     "id": 24,
     "prompt": "Can you help me debug my react component?",
-    "response": "Regarding \"you\" - that's an interesting topic. I can help you write code, debug issues, or document features related to it.",
-    "duration": 40
+    "response": "React components are building blocks of UI. Functional components are preferred:\n```javascript\nconst MyComponent = ({ props }) => {\n  return <div>{props.text}</div>;\n}\n```\nUse hooks like `useState` and `useEffect` for state and side effects.",
+    "duration": 83
   },
   {
     "id": 25,
     "prompt": "I need to deploy a docker container",
-    "response": "Docker containers package code and dependencies together. Use a `Dockerfile` to define the image and `docker-compose.yml` for orchestration.",
-    "duration": 30
+    "response": "Docker containers package code and dependencies together. Key concepts:\n- `Dockerfile`: Defines the image\n- `docker build`: Creates an image\n- `docker run`: Starts a container\n- `docker-compose.yml`: Orchestrates multiple containers\n\nContainers are isolated, portable, and lightweight compared to VMs.",
+    "duration": 92
   },
   {
     "id": 26,
     "prompt": "Why is my code failing?",
-    "response": "Regarding \"my code\" - that's an interesting topic. I can help you write code, debug issues, or document features related to it.",
-    "duration": 25
+    "response": "That's worth investigating. Common reasons include configuration issues, dependency conflicts, or logic errors. Can you share more details about the error?",
+    "duration": 62
   },
   {
     "id": 27,
     "prompt": "",
-    "response": "I encountered an error processing that request.",
-    "duration": 1
+    "response": "I'm here to help. What would you like to know about coding, DevOps, or technical topics?",
+    "duration": 0
   },
   {
     "id": 28,
     "prompt": "   ",
-    "response": "I'm listening. Tell me more about what you're working on.",
-    "duration": 13
+    "response": "I'm here to help. What would you like to know about coding, DevOps, or technical topics?",
+    "duration": 0
   },
   {
     "id": 29,
     "prompt": "asdf jkl;",
-    "response": "Regarding \"asdf jkl;\" - that's an interesting topic. I can help you write code, debug issues, or document features related to it.",
-    "duration": 28
+    "response": "Regarding \"asdf jkl;\" - I can help you explore this concept, write code for it, or troubleshoot issues. What's your main goal?",
+    "duration": 49
   },
   {
     "id": 30,
     "prompt": "What is the meaning of life, the universe, and everything?",
-    "response": "You're asking about \"the meaning of life,\". While I don't have a specific definition for that yet, I can help you look it up or analyze code related to it.",
-    "duration": 44
+    "response": "You're asking about \"the meaning of life,\". Based on the context, I'd recommend breaking this down into specific components. What aspect would you like to explore first?",
+    "duration": 114
   }
 ]
