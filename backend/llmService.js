@@ -1037,7 +1037,24 @@ ${closingLine}`;
     }
 
     if (model.type === 'local') {
-      const result = this.generateLocalChatResponse(messages, resolvedModelId, options);
+      // Keep the original rule-based assistant behavior for the built-in instruct model
+      // but route other local models (for example the new `local/aakarsh`) through
+      // the neural local generator so they produce LLM replies instead of canned text.
+      if (resolvedModelId === 'local/instruct') {
+        const result = this.generateLocalChatResponse(messages, resolvedModelId, options);
+
+        return {
+          message: result.text,
+          model: result.model,
+          modelInfo: result.modelInfo,
+          loading: result.loading,
+          notices: result.notices
+        };
+      }
+
+      // For other local models, compose a prompt and run the neural local generator
+      const prompt = this.formatMessagesAsPrompt(messages, resolvedModelId);
+      const result = await this.generateWithLocalModel(prompt, resolvedModelId, options);
 
       return {
         message: result.text,
